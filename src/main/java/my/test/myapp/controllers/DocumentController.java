@@ -1,78 +1,64 @@
 package my.test.myapp.controllers;
 
-import org.apache.tika.Tika;
-import org.apache.tika.exception.TikaException;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.parser.AutoDetectParser;
-import org.apache.tika.parser.ParseContext;
-import org.apache.tika.parser.Parser;
-import org.apache.tika.sax.ToXMLContentHandler;
-import org.springframework.web.bind.annotation.RestController;
-import org.xml.sax.SAXException;
-
+import my.test.myapp.domainClasses.DataPoint;
 import my.test.myapp.domainClasses.Document;
 import my.test.myapp.repositories.DocumentRepository;
+import my.test.myapp.services.FileService;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-
-import org.springframework.web.bind.annotation.GetMapping;
+import org.json.JSONObject;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/documents")
 public class DocumentController {
-	private DocumentRepository documentRepository;
+	private final DocumentRepository documentRepository;
+	private final FileService fileService;
 	
-	private DocumentController(DocumentRepository documentRepository) {
+	private DocumentController(DocumentRepository documentRepository,
+							   FileService fileService) {
 		this.documentRepository = documentRepository;
+		this.fileService = fileService;
 	}
 
-	@GetMapping("/{documentId}")
-	public Iterable<Document> getDocumentById(@PathVariable Long documentId) {
-		return documentRepository.getDocumentById(documentId);
+	@RequestMapping(value = "/{documentName}", method = RequestMethod.GET)
+	@ResponseBody
+	public Optional<Document> findByName(@PathVariable String documentName) {
+		return documentRepository.findByName(documentName);
 	}
 	
-	@GetMapping("/{documentId}/data-points")
-	public Iterable<String> getDataPointsByDocumentId(@PathVariable Long documentId) {
-		return documentRepository.getDataPointsByDocumentId(documentId);
-	}
-	
-	@PostMapping("/upload")
-	public String uploadAndParseFile(@RequestBody String file) {
-		try {
-			InputStream stream = new FileInputStream("src/main/resources/input.pdf");
-			return extractContentUsingParser(stream);
-		} catch (IOException e) {
-			e.printStackTrace();
-			return e.getMessage();
-		} catch (TikaException e) {
-			e.printStackTrace();
-			return e.getMessage();
-		} catch (SAXException e) {
-			e.printStackTrace();
-			return e.getMessage();
+	@RequestMapping(value = "/{documentName}/data-points", method = RequestMethod.GET)
+	@ResponseBody
+	public String getDataPointsByDocumentName(@PathVariable String documentName) {
+		Optional<Document> document = documentRepository.findByName(documentName);
+		JSONObject json = new JSONObject();
+		if (document.isPresent()) {
+			document.get().getDataPoints().stream().forEach(item -> json.put(item.getName(), item.getDescription()));
 		}
+		return json.toString();
 	}
 	
-	public String detectDocTypeUsingFacade(InputStream stream) throws IOException {
-		Tika tika = new Tika();
-		String mediaType = tika.detect(stream);
-		return mediaType;
-	}
-	
-	public String extractContentUsingParser(InputStream stream) throws IOException, TikaException, SAXException {
-		Parser parser = new AutoDetectParser();
-//		BodyContentHandler handler = new BodyContentHandler();
-		ToXMLContentHandler handler = new ToXMLContentHandler();
-		Metadata metadata = new Metadata();
-		ParseContext context = new ParseContext();
+	@RequestMapping(value = "/upload", method = RequestMethod.POST)
+	@ResponseBody
+	public String uploadAndParseFile() {
+		Map<String, String> data = fileService.extractContentUsingParser();
+		if (data.containsKey("error")) {
+			return data.get("error");
+		}
 
-		parser.parse(stream, handler, metadata, context);
-		return handler.toString();
+		Document doc = new Document(data.get("title"));
+		DataPoint dataPoint = new DataPoint("Definitions", data.get("content"));
+		doc.setDataPoints(new HashSet<>(Arrays.asList(dataPoint)));
+		documentRepository.save(doc);
+		return "Upload completed";
 	}
 }

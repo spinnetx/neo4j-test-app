@@ -1,13 +1,16 @@
 package my.test.myapp.controllers;
 
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import my.test.myapp.domainClasses.DataPoint;
 import my.test.myapp.repositories.DataPointRepository;
+
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/data-points")
@@ -17,11 +20,18 @@ public class DataPointController {
 	public DataPointController(DataPointRepository dataPointRepository) {
 		this.dataPointRepository = dataPointRepository;
 	}
-	
-	@PostMapping("/{dataPointId}/add-to-dataset")
-	public DataPoint addToDataset(@PathVariable Long dataPointId, @RequestBody String body) {
-		return dataPointRepository.save(new DataPoint(dataPointId, body));
+
+	@RequestMapping(value = "/{dataPointName}", method = RequestMethod.GET)
+	@ResponseBody
+	public Optional<DataPoint> findByName(@PathVariable String dataPointName) {
+		return dataPointRepository.findByName(dataPointName);
 	}
-//	POST api/data-points/{DataPointID}/add-to-dataset – in format: label -> text content. 
+
+	@RequestMapping(value = "/{dataPointName}/add-to-dataset", method = RequestMethod.POST)
+	@ResponseBody
+	public String addToDataset(@PathVariable String dataPointName, @RequestBody String body) {
+		dataPointRepository.save(new DataPoint(dataPointName, body));
+		return "Added to dataset";
+	}
 
 }
